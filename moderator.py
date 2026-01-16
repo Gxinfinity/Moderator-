@@ -11,8 +11,7 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 # --- CONFIGURATION ---
 API_ID = 27209067
 API_HASH = "0bb2571bd490320a5c9209d4bf07902e"
-BOT_TOKEN = "YAHAN_APNA_TOKEN_DAALEIN" # @BotFather se lein
-
+BOT_TOKEN = ""
 API_USER = "1641898842"
 API_SECRET = "BrqWQkJqe3Epgse73zWTwrsYbDgpZG6X"
 
