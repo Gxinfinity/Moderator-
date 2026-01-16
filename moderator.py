@@ -1,14 +1,14 @@
 import os, requests, re, cv2, asyncio, zipfile, shutil
 from PIL import Image
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- CONFIGURATION ---
 API_ID = 27209067
 API_HASH = "0bb2571bd490320a5c9209d4bf07902e"
 BOT_TOKEN = "" 
 
-# Log Channel ID (Example: -100123456789)
+# Sahii ID daalein (Example: -100xxxxxxxxxx)
 LOG_CHANNEL_ID = -1003506657299 
 
 API_USER = "1641898842"
@@ -16,46 +16,30 @@ API_SECRET = "BrqWQkJqe3Epgse73zWTwrsYbDgpZG6X"
 
 BAD_WORDS = ["nude", "sex", "porn", "pussy", "dick", "fucker", "gandu", "bc", "mc", "randi", "loda", "chut", "sexy"]
 DOWNLOAD_DIR = "./downloads/"
-LINK_WARNINGS = {}
-SCAN_DATA = {}
-
 if not os.path.exists(DOWNLOAD_DIR): os.makedirs(DOWNLOAD_DIR)
 
-app = Client("A1_ULTRA_V7", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-
-# --- A1 UI INTERFACE ---
-
-DM_START_TEXT = """
-✨ **ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴀ1 ɴsғᴡ ᴅɪʀᴇᴄᴛᴏʀ** ✨
-━━━━━━━━━━━━━━━━━━━━
-🛡️ **ɪ ᴀᴍ ᴛʜᴇ ᴍᴏsᴛ ᴘᴏᴡᴇʀғᴜʟ ɢᴜᴀʀᴅɪᴀɴ**
-I protect your groups from NSFW Media, Bad Words, and Spam.
-
-**Status:** `A1 Pro Max Active` 🚀
-━━━━━━━━━━━━━━━━━━━━
-"""
-
-BAN_CARD = """
-✨ **ᴀ1 ɴsғᴡ ᴅɪʀᴇᴄᴛᴏʀ** ✨
-━━━━━━━━━━━━━━━━━━━━
-🚫 **ᴜsᴇʀ ʙᴀɴɴᴇᴅ ɪɴsᴛᴀɴᴛʟʏ**
-━━━━━━━━━━━━━━━━━━━━
-👤 **User:** {user}
-🆔 **ID:** `{user_id}`
-📝 **Reason:** `{reason}`
-🛠️ **Action:** `All Messages Cleared + Ban`
-━━━━━━━━━━━━━━━━━━━━
-"""
+app = Client("A1_ULTRA_V9", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
 # --- CORE FUNCTIONS ---
 
 async def send_to_logs(client, message, user, reason, action):
+    """Log channel mein report bhejne ka fixed logic"""
     try:
-        await client.send_message(
-            LOG_CHANNEL_ID,
-            f"🚨 **ᴀ1 sʏsᴛᴇᴍ ᴀᴄᴛɪᴏɴ ʟᴏɢ**\n━━━━━━━━━━━━\n🛠️ **Action:** `{action}`\n👤 **Name:** {user.first_name}\n🆔 **ID:** `{user.id}`\n📝 **Reason:** `{reason}`\n📍 **Group:** {message.chat.title}\n━━━━━━━━━━━━"
+        report = (
+            f"🚨 **ᴀ1 sʏsᴛᴇᴍ ᴀᴄᴛɪᴏɴ ʟᴏɢ**\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🛠️ **Action:** `{action}`\n"
+            f"👤 **Name:** {user.first_name}\n"
+            f"🆔 **User ID:** `{user.id}`\n"
+            f"🔗 **Username:** @{user.username or 'None'}\n"
+            f"📝 **Reason:** `{reason}`\n"
+            f"📍 **Group:** {message.chat.title}\n"
+            f"━━━━━━━━━━━━━━━━━━━━"
         )
-    except: pass
+        await client.send_message(LOG_CHANNEL_ID, report)
+    except Exception as e:
+        # Isse aapko terminal mein dikhega ki log kyun nahi ja raha
+        print(f"❌ Log Channel Error: {e}. Check if Bot is Admin in Channel {LOG_CHANNEL_ID}")
 
 def check_nsfw(file_path):
     if not file_path or not os.path.exists(file_path): return False
@@ -69,81 +53,82 @@ def check_nsfw(file_path):
     
     params = {'models': 'nudity-2.0', 'api_user': API_USER, 'api_secret': API_SECRET}
     try:
-        r = requests.post('https://api.sightengine.com/1.0/check.json', files={'media': open(file_path, 'rb')}, data=params)
-        res = r.json()
-        if res.get('status') == 'success':
-            n = res['nudity']
-            # Strict threshold for instant action
-            if n['sexual_display'] > 0.2 or n['erotica'] > 0.2 or n['sexual_activity'] > 0.2: return True
+        with open(file_path, 'rb') as f:
+            r = requests.post('https://api.sightengine.com/1.0/check.json', files={'media': f}, data=params)
+            res = r.json()
+            if res.get('status') == 'success':
+                n = res['nudity']
+                if n['sexual_display'] > 0.2 or n['erotica'] > 0.2: return True
     except: pass
     return False
 
 async def a1_instant_destruction(client, message, reason):
     user = message.from_user
+    chat_id = message.chat.id
     try:
-        # 1. Pehle Triggering Message udaao (Sabse zaroori)
-        await message.delete()
-        # 2. Fir User ko Ban karo
+        # 1. Sabse pehle user ko BAN karo (Taaki wo aur na bhej sake)
         await message.chat.ban_member(user.id)
-        # 3. Fir uski saari History saaf karo
-        await client.delete_user_history(message.chat.id, user.id)
-        # 4. Report bhejo
-        await message.reply_text(BAN_CARD.format(user=user.mention, user_id=user.id, reason=reason))
-        await send_to_logs(client, message, user, reason, "Instant Ban + History Clear")
+        
+        # 2. Triggering message DELETE karo
+        await message.delete()
+        
+        # 3. HISTORY WIPE (Sirf Supergroup mein kaam karega)
+        # Note: Bot ko 'Delete Messages' permission honi chahiye
+        try:
+            await client.delete_user_history(chat_id, user.id)
+        except Exception as e:
+            print(f"⚠️ History Cleanup failed: {e}. Ensure Group is a Supergroup.")
+
+        # 4. Logs bhejo
+        await send_to_logs(client, message, user, reason, "Instant Ban + History Wipe")
+        
+        # 5. Ban Confirmation
+        await message.reply_text(f"🚫 **Banned!** {user.mention} has been removed and history cleared.")
+        
     except Exception as e:
-        print(f"Ban Error: {e}")
+        print(f"❌ Destruction Process Error: {e}")
 
 # --- HANDLERS ---
 
-@app.on_message(filters.command("start"))
-async def start_handler(client, message):
-    if message.chat.type == message.chat.type.PRIVATE:
-        buttons = InlineKeyboardMarkup([[InlineKeyboardButton("➕ Add Me to Your Group", url=f"https://t.me/{(await client.get_me()).username}?startgroup=true")]])
-        await message.reply_text(DM_START_TEXT, reply_markup=buttons)
-
 @app.on_message(filters.group & ~filters.service)
-async def a1_guardian(client, message: Message):
+async def a1_guard(client, message: Message):
     if not message.from_user: return
     u_id = message.from_user.id
-    
-    # Admin Check
+
     is_admin = False
     try:
         member = await client.get_chat_member(message.chat.id, u_id)
         if member.status in ["administrator", "creator"]: is_admin = True
     except: pass
 
-    # 1. MEDIA SCAN (Photos, Videos, Stickers)
+    # Media Scanning
     file_path = None
     try:
-        if message.photo or message.sticker or message.video or (message.document and message.document.file_name and message.document.file_name.endswith('.zip')):
-            # Direct delete logic for stickers/images
+        if message.photo or message.sticker or message.video:
             file_path = await message.download(file_name=DOWNLOAD_DIR)
             if check_nsfw(file_path):
-                # Pehle delete, fir baaki action
-                await message.delete() 
                 if not is_admin:
-                    await a1_instant_destruction(client, message, "NSFW Content")
+                    await a1_instant_destruction(client, message, "NSFW Media Violation")
                 else:
-                    await send_to_logs(client, message, message.from_user, "NSFW (Admin)", "Admin Message Deleted Only")
-                    await message.reply(f"⚠️ **Admin Alert!** NSFW media detect hua aur mita diya gaya.")
+                    await message.delete()
+                    await send_to_logs(client, message, message.from_user, "NSFW (Admin)", "Admin Message Deleted")
     except: pass
     finally:
         if file_path and os.path.exists(file_path): os.remove(file_path)
 
-# 2. JOIN SCAN
-@app.on_message(filters.group & filters.new_chat_members)
-async def join_check(client, message: Message):
-    for u in message.new_chat_members:
-        # Profile Pic Scan
-        photos = [p async for p in client.get_chat_photos(u.id, limit=1)]
-        if photos:
-            path = await client.download_media(photos[0].file_id, file_name=DOWNLOAD_DIR)
-            if check_nsfw(path):
-                await message.chat.ban_member(u.id)
-                await client.delete_user_history(message.chat.id, u.id)
-                await send_to_logs(client, message, u, "NSFW Profile Pic", "Join Ban + History Clear")
-            if os.path.exists(path): os.remove(path)
+# Scan command to check bot health
+@app.on_message(filters.command("check") & filters.group)
+async def check_rights(client, message):
+    me = await client.get_chat_member(message.chat.id, "me")
+    report = (
+        f"🛠️ **ᴀ1 ʙᴏᴛ sᴛᴀᴛᴜs ᴄʜᴇᴄᴋ**\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🚫 **Ban Users:** {'✅' if me.privileges.can_restrict_members else '❌'}\n"
+        f"🗑️ **Delete Messages:** {'✅' if me.privileges.can_delete_messages else '❌'}\n"
+        f"📊 **Supergroup:** {'✅' if message.chat.type.name == 'SUPERGROUP' else '❌'}\n"
+        f"━━━━━━━━━━━━━━━━━━━━"
+    )
+    await message.reply(report)
 
-print("🚀 A1 V7 (FIXED) IS LIVE...")
+print("🚀 A1 V9 (LOG & HISTORY FIX) IS LIVE...")
 app.run()
