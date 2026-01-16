@@ -3,53 +3,31 @@ import requests
 import re
 import cv2
 import asyncio
+import zipfile
+import shutil
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 # --- CONFIGURATION ---
 API_ID = 27209067
 API_HASH = "0bb2571bd490320a5c9209d4bf07902e"
-BOT_TOKEN = "YAHAN_TOKEN_DAALEIN" # @BotFather se lein
+BOT_TOKEN = "YAHAN_APNA_TOKEN_DAALEIN" # @BotFather se lein
 
 API_USER = "1641898842"
 API_SECRET = "BrqWQkJqe3Epgse73zWTwrsYbDgpZG6X"
 
+# Gande Words List
 BAD_WORDS = ["nude", "sex", "porn", "pussy", "dick", "fucker", "gandu", "bc", "mc", "randi", "loda", "chut"]
 
-app = Client("A1_ULTRA_PRO_MAX", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+# Downloads folder fix
+DOWNLOAD_DIR = "./downloads/"
+if not os.path.exists(DOWNLOAD_DIR):
+    os.makedirs(DOWNLOAD_DIR)
 
-# --- A1 INTERFACE DESIGNS ---
+app = Client("A1_ULTRA_DIRECTOR", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# DM (Private Chat) Start Interface
-DM_START_TEXT = """
-✨ **ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴀ1 ɴsғᴡ ᴅɪʀᴇᴄᴛᴏʀ** ✨
-━━━━━━━━━━━━━━━━━━━━
-🛡️ **I am the most advanced NSFW Guardian.**
-I protect your groups from:
-• 🔞 **NSFW Photos & Videos**
-• 🔞 **Gande Stickers (All Types)**
-• 🤬 **Abuses & Bad Words**
-• 👤 **NSFW Profile & Name/Bio**
+# --- A1 INTERFACE ---
 
-**Status:** `A1 - Ultra Active` 🚀
-━━━━━━━━━━━━━━━━━━━━
-"""
-
-# Group Start Interface
-GP_START_TEXT = """
-🛡️ **ᴀ1 ɴsғᴡ sʏsᴛᴇᴍ ɪs ᴏɴʟɪɴᴇ**
-━━━━━━━━━━━━━━━━━━━━
-✅ **Group is now under A1 Protection.**
-I will automatically:
-• Ban anyone sending NSFW.
-• Delete all messages of the banned user.
-• Scan joining members for NSFW DPs.
-
-**Powered By:** `A1 Ultra Pro Max`
-━━━━━━━━━━━━━━━━━━━━
-"""
-
-# Attractive Ban Card
 BAN_CARD = """
 🚫 **NSFW VIOLATION DETECTED**
 ━━━━━━━━━━━━━━━━━━━━
@@ -60,7 +38,7 @@ BAN_CARD = """
 ━━━━━━━━━━━━━━━━━━━━
 """
 
-# --- HELPER FUNCTIONS ---
+# --- CORE FUNCTIONS ---
 
 def check_nsfw(file_path):
     if not file_path or not os.path.exists(file_path): return False
@@ -71,109 +49,103 @@ def check_nsfw(file_path):
             res = r.json()
             if res.get('status') == 'success':
                 n = res['nudity']
-                # High sensitivity for A1 performance
                 if n['sexual_display'] > 0.3 or n['erotica'] > 0.3: return True
     except: pass
     return False
 
-async def full_cleanup_ban(client, message, reason):
-    user_id = message.from_user.id
+async def a1_ban_cleanup(client, message, reason):
     try:
-        # 1. Ban User
+        user_id = message.from_user.id
         await message.chat.ban_member(user_id)
-        # 2. Delete Entire History of that user
         await client.delete_user_history(message.chat.id, user_id)
-        # 3. Alert Group
         await message.reply_text(BAN_CARD.format(user=message.from_user.mention, user_id=user_id, reason=reason))
-        # 4. Save Log
-        with open("logs.txt", "a+") as f: f.write(f"Banned: {user_id} | Reason: {reason}\n")
     except: pass
 
-# --- COMMAND HANDLERS ---
+# --- HANDLERS ---
 
 @app.on_message(filters.command("start") & filters.private)
 async def start_private(client, message):
     await message.reply_text(
-        text=DM_START_TEXT,
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("➕ Add Me to Your Group", url=f"https://t.me/{(await client.get_me()).username}?startgroup=true")
-        ], [
-            InlineKeyboardButton("📢 Support Channel", url="https://t.me/YourSupportChannel")
-        ]])
+        "✨ **ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴀ1 ɴsғᴡ ᴅɪʀᴇᴄᴛᴏʀ** ✨\n━━━━━━━━━━━━━━━━━━━━\n🛡️ I am active and protecting your groups.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("➕ Add Me to Group", url=f"https://t.me/{(await client.get_me()).username}?startgroup=true")]])
     )
 
-@app.on_message(filters.command("start") & filters.group)
-async def start_group(client, message):
-    await message.reply_text(text=GP_START_TEXT)
-
-# --- MAIN GUARD LOGIC (A1 Level) ---
-
 @app.on_message(filters.group & ~filters.service)
-async def a1_guardian(client, message: Message):
+async def a1_logic(client, message: Message):
     if not message.from_user: return
     user = message.from_user
 
-    # 1. NAME/USERNAME SCAN
-    name_check = f"{user.first_name} {user.last_name or ''} {user.username or ''}".lower()
-    for word in BAD_WORDS:
-        if word in name_check:
-            await full_cleanup_ban(client, message, f"Ganda Name/Bio ({word})")
-            return
+    # 1. Name/Username Scan
+    u_info = f"{user.first_name} {user.last_name or ''} {user.username or ''}".lower()
+    if any(word in u_info for word in BAD_WORDS):
+        await a1_ban_cleanup(client, message, "NSFW in Name/Username")
+        return
 
-    # 2. TEXT & CAPTION SCAN
+    # 2. Text/Caption Scan
     text = (message.text or message.caption or "").lower()
-    for word in BAD_WORDS:
-        if re.search(rf"\b{word}\b", text):
-            await full_cleanup_ban(client, message, f"Bad Words Used ({word})")
-            return
+    if any(re.search(rf"\b{word}\b", text) for word in BAD_WORDS):
+        await a1_ban_cleanup(client, message, "Gande Words Used")
+        return
 
-    # 3. STICKER & MEDIA SCAN
+    # 3. Media/Sticker/Zip Scan
     file_path = None
     try:
-        if message.sticker:
-            # Animated Stickers (.tgs) direct block/ban for security
-            if message.sticker.is_animated:
-                await full_cleanup_ban(client, message, "Animated Sticker (Prohibited)")
-                return
-            
-            # Static/Video Stickers download aur scan
-            file_path = await message.download()
-            if check_nsfw(file_path):
-                await full_cleanup_ban(client, message, "NSFW Sticker")
+        # ZIP CHECK
+        if message.document and message.document.file_name and message.document.file_name.endswith('.zip'):
+            file_path = await message.download(file_name=DOWNLOAD_DIR)
+            with zipfile.ZipFile(file_path, 'r') as zip_ref:
+                z_tmp = f"{DOWNLOAD_DIR}unzip_{message.id}"
+                zip_ref.extractall(z_tmp)
+                for r, _, files in os.walk(z_tmp):
+                    for f in files:
+                        if f.lower().endswith(('.jpg', '.png', '.jpeg', '.webp')):
+                            if check_nsfw(os.path.join(r, f)):
+                                await a1_ban_cleanup(client, message, "NSFW inside ZIP")
+                                shutil.rmtree(z_tmp)
+                                return
+                shutil.rmtree(z_tmp)
 
-        elif message.photo or message.video:
-            file_path = await message.download()
+        # STICKER/PHOTO/VIDEO CHECK
+        elif message.photo or message.sticker or message.video:
+            # Animated Stickers ban
+            if message.sticker and message.sticker.is_animated:
+                await a1_ban_cleanup(client, message, "Animated Sticker (Prohibited)")
+                return
+
+            file_path = await message.download(file_name=DOWNLOAD_DIR)
             is_bad = False
-            if message.video:
+            
+            if message.video or (message.sticker and message.sticker.is_video):
                 cap = cv2.VideoCapture(file_path)
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 10) # 10th frame check
                 ret, frame = cap.read()
                 if ret:
-                    cv2.imwrite("v_tmp.jpg", frame)
-                    if check_nsfw("v_tmp.jpg"): is_bad = True
-                    os.remove("v_tmp.jpg")
+                    tmp_frame = f"{DOWNLOAD_DIR}frame_{message.id}.jpg"
+                    cv2.imwrite(tmp_frame, frame)
+                    if check_nsfw(tmp_frame): is_bad = True
+                    if os.path.exists(tmp_frame): os.remove(tmp_frame)
                 cap.release()
             else:
                 is_bad = check_nsfw(file_path)
 
             if is_bad:
-                await full_cleanup_ban(client, message, "NSFW Media")
+                await a1_ban_cleanup(client, message, "NSFW Media/Sticker")
 
-    except Exception as e: print(f"Error: {e}")
+    except Exception as e:
+        print(f"A1 Error: {e}")
     finally:
         if file_path and os.path.exists(file_path): os.remove(file_path)
 
-# 4. PROFILE PICTURE GUARD
+# 4. Join Scan
 @app.on_message(filters.group & filters.new_chat_members)
-async def profile_check(client, message: Message):
-    for user in message.new_chat_members:
-        photos = [p async for p in client.get_chat_photos(user.id, limit=1)]
+async def join_scan(client, message: Message):
+    for u in message.new_chat_members:
+        photos = [p async for p in client.get_chat_photos(u.id, limit=1)]
         if photos:
-            path = await client.download_media(photos[0].file_id)
+            path = await client.download_media(photos[0].file_id, file_name=DOWNLOAD_DIR)
             if check_nsfw(path):
-                await message.chat.ban_member(user.id)
-                await message.reply(BAN_CARD.format(user=user.mention, user_id=user.id, reason="NSFW Profile Picture"))
+                await message.chat.ban_member(u.id)
+                await message.reply(BAN_CARD.format(user=u.mention, user_id=u.id, reason="NSFW Profile Picture"))
             if os.path.exists(path): os.remove(path)
 
-print("💎 A1 ULTRA PRO MAX INTERFACE IS LIVE...")
+print("🚀 A1 ULTRA PRO MAX IS LIVE (Bugs Fixed)...")
 app.run()
