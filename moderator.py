@@ -7,6 +7,7 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, 
 API_ID = 27209067
 API_HASH = "0bb2571bd490320a5c9209d4bf07902e"
 BOT_TOKEN = "" 
+
 # Sightengine Keys
 API_USER = "1641898842"
 API_SECRET = "BrqWQkJqe3Epgse73zWTwrsYbDgpZG6X"
@@ -54,7 +55,6 @@ BAN_CARD = """
 
 def check_nsfw(file_path):
     if not file_path or not os.path.exists(file_path): return False
-    # Stickers/PNG convert to JPG for AI accuracy
     if file_path.endswith((".webp", ".png")):
         try:
             img = Image.open(file_path).convert("RGB")
@@ -134,7 +134,7 @@ async def a1_guardian(client, message: Message):
     if not message.from_user: return
     u_id = message.from_user.id
     
-    # Check Admin
+    # Check Admin Status
     is_admin = False
     try:
         member = await client.get_chat_member(message.chat.id, u_id)
@@ -145,7 +145,7 @@ async def a1_guardian(client, message: Message):
     text = (message.text or message.caption or "").lower()
     if "t.me/" in text or "http" in text:
         if is_admin: 
-            await message.delete()
+            await message.delete() # Admin ka bhi delete hoga
             return
         LINK_WARNINGS[u_id] = LINK_WARNINGS.get(u_id, 0) + 1
         if LINK_WARNINGS[u_id] >= 3:
@@ -157,8 +157,8 @@ async def a1_guardian(client, message: Message):
 
     # 2. BAD WORDS
     if any(re.search(rf"\b{word}\b", text) for word in BAD_WORDS):
-        if is_admin: await message.delete()
-        else: await a1_mass_ban_cleanup(client, message, "Abusive Language")
+        await message.delete()
+        if not is_admin: await a1_mass_ban_cleanup(client, message, "Abusive Language")
         return
 
     # 3. MEDIA SCAN (Image/Video/Sticker/ZIP)
@@ -195,9 +195,11 @@ async def a1_guardian(client, message: Message):
             else: is_bad = check_nsfw(file_path)
 
             if is_bad:
-                await message.delete()
-                if not is_admin: await a1_mass_ban_cleanup(client, message, "NSFW Content Detected")
-                else: await message.reply("⚠️ **Admin Alert!** NSFW media detected and deleted.")
+                await message.delete() # Admin ka bhi turant delete hoga
+                if not is_admin: 
+                    await a1_mass_ban_cleanup(client, message, "NSFW Content Detected")
+                else: 
+                    await message.reply("⚠️ **Admin Alert!** NSFW media detect hua aur delete kar diya gaya.")
 
     except: pass
     finally:
